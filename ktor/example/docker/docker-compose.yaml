@@ -1,0 +1,91 @@
+services:
+  nginx:
+    image: nginx:alpine
+    restart: always
+    networks:
+      - nginx
+    ports:
+      - "0.0.0.0:80:80/tcp"
+      - "0.0.0.0:443:443/tcp"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/ssl:ro
+      - ./nginx/example:/www/example:ro
+    depends_on:
+      - ktor
+
+  ktor:
+    image: eclipse-temurin:22-jre
+    restart: always
+    networks:
+      - nginx
+      - postgres
+    volumes:
+      - ./ktor/app.jar:/app/app.jar:ro
+    entrypoint: ["java", "-jar", "/app/app.jar"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ID_TYPE: UUID
+      POSTGRES_HOST: db
+      POSTGRES_DB: native_push
+      POSTGRES_USER: native_push
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      FIREBASE_SERVICE_ACCOUNT_FILE: /run/secrets/service_account
+      APNS_P8_FILE: /run/secrets/apns_p8_file
+      APNS_KEY_ID_FILE: /run/secrets/apns_key_id
+      APNS_TEAM_ID_FILE: /run/secrets/apns_team_id
+      APNS_TOPIC: com.opdehipt.nativepushclient.example
+      WEB_PUSH_SUBJECT_FILE: /run/secrets/web_push_subject
+      VAPID_KEYS_FILE: /run/secrets/vapid_keys
+      DEVELOPMENT: true
+    secrets:
+      - db_password
+      - service_account
+      - apns_p8_file
+      - apns_key_id
+      - apns_team_id
+      - web_push_subject
+      - vapid_keys
+
+  db:
+    image: postgres:alpine
+    restart: always
+    networks:
+      - postgres
+    volumes:
+      - ./db:/var/lib/postgresql/data
+    environment:
+      POSTGRES_DB: native_push
+      POSTGRES_USER: native_push
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    secrets:
+      - db_password
+
+networks:
+  nginx:
+    driver: bridge
+  postgres:
+    driver: bridge
+
+secrets:
+  db_password:
+    file: ./secrets/db_password
+  service_account:
+    file: ./secrets/service_account_key.json
+  apns_p8_file:
+    file: ./secrets/apns_key.p8
+  apns_key_id:
+    file: ./secrets/apns_key_id
+  apns_team_id:
+    file: ./secrets/apns_team_id
+  web_push_subject:
+    file: ./secrets/web_push_subject
+  vapid_keys:
+    file: ./secrets/vapid_keys
