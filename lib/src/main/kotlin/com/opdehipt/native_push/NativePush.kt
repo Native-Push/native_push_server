@@ -375,7 +375,7 @@ abstract class NativePush<ID> {
             "body" to body,
             "bodyLocalizationKey" to bodyLocalizationKey,
             "bodyLocalizationArgs" to bodyLocalizationArgs,
-            "imageUrl" to imageUrl,
+            "image" to imageUrl,
         ).mapNotNull {
             val value = it.value
             if (value !== null) {
