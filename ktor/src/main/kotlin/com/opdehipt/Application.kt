@@ -50,6 +50,7 @@ private fun ApplicationEngineEnvironmentBuilder.envConfig() {
         "vapidKeysFile" to              getEnvironmentVariable("VAPID_KEYS_FILE"),
         "vapidPublicKey" to             getEnvironmentVariable("VAPID_PUBLIC_KEY"),
         "vapidPrivateKey" to            getEnvironmentVariable("VAPID_PRIVATE_KEY"),
+        "authorizationValidationUrl" to getEnvironmentVariable("AUTHORIZATION_VALIDATION_URL"),
         "development" to                getEnvironmentVariable("DEVELOPMENT"),
     ).mapNotNull {
         val value = it.value
@@ -75,7 +76,7 @@ private fun Application.module() {
     configureMonitoring()
     configureSerialization()
     configureDatabases(idType)
-    configureRouting(idType)
+    configureRouting(idType, environment.config.propertyOrNull("authorizationValidationUrl")?.getString())
 }
 
 @Throws(SecurityException::class)

@@ -3,6 +3,10 @@ package com.opdehipt.plugins
 import com.opdehipt.IdType
 import com.opdehipt.native_push.NotificationPriority
 import com.opdehipt.native_push.PushSystem
+import io.ktor.client.*
+import io.ktor.client.call.*
+import io.ktor.client.request.*
+import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
@@ -18,15 +22,29 @@ import kotlinx.serialization.encoding.Encoder
 import java.security.InvalidParameterException
 import java.util.*
 
-internal fun <T> Application.configureRouting(idType: IdType<T>) {
+internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationValidationUrl: String?) {
     routing {
         route("/{userId}") {
             fun PipelineContext<*, ApplicationCall>.getUser() =
                 idType.run { getUserId() } ?: throw InvalidParameterException("Invalid user id")
 
+            suspend fun PipelineContext<Unit, ApplicationCall>.verifyAuthorization(userId: String) {
+                if (authorizationValidationUrl != null) {
+                    val authorization = call.request.headers[HttpHeaders.Authorization]
+                    val response = HttpClient().post(authorizationValidationUrl) {
+                        header(HttpHeaders.Authorization, authorization)
+                        header("user_id", userId)
+                    }
+                    if (!response.status.isSuccess() || !response.body<SuccessResult>().success) {
+                        throw InvalidParameterException("Authorization verification failed")
+                    }
+                }
+            }
+
             route("/token") {
                 post {
                     val userId = getUser()
+                    verifyAuthorization(userId.toString())
                     val request = call.receive<TokenRequest>()
                     val tokenId = idType.addToken(request.system, request.token, userId)
                     call.respond(NewTokenResponse(tokenId))
@@ -40,6 +58,7 @@ internal fun <T> Application.configureRouting(idType: IdType<T>) {
                     put {
                         val id = getTokenId()
                         val userId = getUser()
+                        verifyAuthorization(userId.toString())
                         val request = call.receive<TokenRequest>()
                         idType.updateToken(id, request.system, request.token, userId)
                         call.respond("")
@@ -47,6 +66,7 @@ internal fun <T> Application.configureRouting(idType: IdType<T>) {
                     delete {
                         val id = getTokenId()
                         val userId = getUser()
+                        verifyAuthorization(userId.toString())
                         idType.deleteToken(id, userId)
                         call.respond("")
                     }

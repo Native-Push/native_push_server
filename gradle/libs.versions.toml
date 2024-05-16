@@ -14,7 +14,7 @@ web-push = "1.2.0"
 guava = "33.2.0-jre"
 
 #Ktor
-ktor="2.3.10"
+ktor="2.3.11"
 exposed="0.41.1"
 postgres="42.7.3"
 mysql="8.4.0"
@@ -40,6 +40,8 @@ ktor-netty = { module = "io.ktor:ktor-server-netty-jvm" }
 ktor-logging = { module = "io.ktor:ktor-server-call-logging-jvm" }
 ktor-contentNegotiation = { module = "io.ktor:ktor-server-content-negotiation-jvm" }
 ktor-serialization = { module = "io.ktor:ktor-serialization-kotlinx-json-jvm" }
+ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
+ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
 exposed-jdbc = { module = "org.jetbrains.exposed:exposed-jdbc", version.ref = "exposed" }
 postgres = { module = "org.postgresql:postgresql", version.ref = "postgres" }

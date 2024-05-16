@@ -27,6 +27,8 @@ dependencies {
     implementation(libs.ktor.logging)
     implementation(libs.ktor.contentNegotiation)
     implementation(libs.ktor.serialization)
+    implementation(libs.ktor.client.core)
+    implementation(libs.ktor.client.cio)
     implementation(libs.exposed.core)
     implementation(libs.exposed.jdbc)
     implementation(libs.postgres)
