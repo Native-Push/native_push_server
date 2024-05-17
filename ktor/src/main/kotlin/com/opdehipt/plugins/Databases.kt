@@ -85,44 +85,36 @@ private suspend fun <T> insertNotificationToken(system: PushSystem, token: Strin
         }
     }.await()[table.tokenId]
 
-internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: UUID) {
+internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: UUID) =
     updateNotificationToken(tokenId, system, token, userId, NotificationTokenUUID)
-}
-internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: Long) {
+internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: Long) =
     updateNotificationToken(tokenId, system, token, userId, NotificationTokenLong)
-}
-internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: String) {
+internal suspend fun updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: String) =
     updateNotificationToken(tokenId, system, token, userId, NotificationTokenString)
-}
 
-private suspend fun <T> updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: T, table: NotificationToken<T>) {
+private suspend fun <T> updateNotificationToken(tokenId: UUID, system: PushSystem, token: String, userId: T, table: NotificationToken<T>) =
     suspendedTransactionAsync {
         table.update({
             table.userId eq userId and (table.tokenId eq tokenId)
         }) {
             it[table.system] = system
             it[table.token] = token
-        }
+        } != 0
     }.await()
-}
 
-internal suspend fun deleteNotificationToken(tokenId: UUID, userId: UUID) {
+internal suspend fun deleteNotificationToken(tokenId: UUID, userId: UUID) =
     deleteNotificationToken(tokenId, userId, NotificationTokenUUID)
-}
-internal suspend fun deleteNotificationToken(tokenId: UUID, userId: Long) {
+internal suspend fun deleteNotificationToken(tokenId: UUID, userId: Long) =
     deleteNotificationToken(tokenId, userId, NotificationTokenLong)
-}
-internal suspend fun deleteNotificationToken(tokenId: UUID, userId: String) {
+internal suspend fun deleteNotificationToken(tokenId: UUID, userId: String) =
     deleteNotificationToken(tokenId, userId, NotificationTokenString)
-}
 
-private suspend fun <T> deleteNotificationToken(tokenId: UUID, userId: T, table: NotificationToken<T>) {
+private suspend fun <T> deleteNotificationToken(tokenId: UUID, userId: T, table: NotificationToken<T>) =
     suspendedTransactionAsync {
         table.deleteWhere {
             table.userId eq userId and (table.tokenId eq tokenId)
-        }
+        } != 0
     }.await()
-}
 
 private abstract class NotificationToken<T>: Table("notification_token") {
     val token = text("token")

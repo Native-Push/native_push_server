@@ -23,6 +23,7 @@ import java.security.InvalidParameterException
 import java.util.*
 
 internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationValidationUrl: String?) {
+    val client = HttpClient()
     routing {
         route("/{userId}") {
             fun PipelineContext<*, ApplicationCall>.getUser() =
@@ -31,9 +32,9 @@ internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationVa
             suspend fun PipelineContext<Unit, ApplicationCall>.verifyAuthorization(userId: String) {
                 if (authorizationValidationUrl != null) {
                     val authorization = call.request.headers[HttpHeaders.Authorization]
-                    val response = HttpClient().post(authorizationValidationUrl) {
+                    val response = client.post(authorizationValidationUrl) {
                         header(HttpHeaders.Authorization, authorization)
-                        header("user_id", userId)
+                        header("User-Id", userId)
                     }
                     if (!response.status.isSuccess() || !response.body<SuccessResult>().success) {
                         throw InvalidParameterException("Authorization verification failed")
@@ -60,15 +61,15 @@ internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationVa
                         val userId = getUser()
                         verifyAuthorization(userId.toString())
                         val request = call.receive<TokenRequest>()
-                        idType.updateToken(id, request.system, request.token, userId)
-                        call.respond("")
+                        val success = idType.updateToken(id, request.system, request.token, userId)
+                        call.respond(SuccessResult(success))
                     }
                     delete {
                         val id = getTokenId()
                         val userId = getUser()
                         verifyAuthorization(userId.toString())
-                        idType.deleteToken(id, userId)
-                        call.respond("")
+                        val success = idType.deleteToken(id, userId)
+                        call.respond(SuccessResult(success))
                     }
                 }
             }
