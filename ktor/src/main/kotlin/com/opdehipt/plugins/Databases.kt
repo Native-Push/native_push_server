@@ -103,7 +103,7 @@ internal suspend fun getNotificationTokens(userId: String) = getNotificationToke
  */
 private suspend fun <T> getNotificationTokens(userId: T, table: NotificationToken<T>): List<Pair<String, PushSystem>> =
     suspendedTransactionAsync {
-        table.select { table.userId eq userId }.map { it[table.token] to it[table.system] }
+        table.selectAll().where { table.userId eq userId }.map { it[table.token] to it[table.system] }
     }.await()
 
 /**
