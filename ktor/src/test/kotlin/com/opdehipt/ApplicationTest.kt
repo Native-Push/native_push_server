@@ -11,7 +11,7 @@ class ApplicationTest {
     @Test
     fun testRoot() = testApplication {
         application {
-            configureRouting(IdType.UUID)
+            configureRouting(IdType.UUID, "")
         }
         client.get("/").apply {
             assertEquals(HttpStatusCode.NotFound, status)

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.jvm)
     alias(libs.plugins.ktor)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.dependency.license.report)
 }
 
 group = "com.opdehipt"

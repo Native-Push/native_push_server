@@ -22,13 +22,34 @@ import kotlinx.serialization.encoding.Encoder
 import java.security.InvalidParameterException
 import java.util.*
 
+/**
+ * Configures the routing for the Ktor application.
+ *
+ * @param T the type of the user ID.
+ * @param idType the type of the user ID (UUID, Long, or String).
+ * @param authorizationValidationUrl the URL used for authorization validation.
+ */
 internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationValidationUrl: String?) {
     val client = HttpClient()
     routing {
         route("/{userId}") {
+            /**
+             * Retrieves the user ID from the request.
+             *
+             * @return the user ID.
+             * @throws InvalidParameterException if the user ID is invalid.
+             */
+            @Throws(InvalidParameterException::class)
             fun PipelineContext<*, ApplicationCall>.getUser() =
                 idType.run { getUserId() } ?: throw InvalidParameterException("Invalid user id")
 
+            /**
+             * Verifies the authorization of the request.
+             *
+             * @param userId the user ID as a string.
+             * @throws InvalidParameterException if authorization verification fails.
+             */
+            @Throws(InvalidParameterException::class)
             suspend fun PipelineContext<Unit, ApplicationCall>.verifyAuthorization(userId: String) {
                 if (authorizationValidationUrl != null) {
                     val authorization = call.request.headers[HttpHeaders.Authorization]
@@ -51,6 +72,13 @@ internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationVa
                     call.respond(NewTokenResponse(tokenId))
                 }
                 route("/{id}") {
+                    /**
+                     * Retrieves the token ID from the request parameters.
+                     *
+                     * @return the token ID.
+                     * @throws InvalidParameterException if the token ID is missing or invalid.
+                     */
+                    @Throws(InvalidParameterException::class)
                     fun PipelineContext<*, ApplicationCall>.getTokenId(): UUID {
                         val idString = call.parameters["id"] ?: throw InvalidParameterException("Missing id")
                         return UUID.fromString(idString)
@@ -98,11 +126,22 @@ internal fun <T> Application.configureRouting(idType: IdType<T>, authorizationVa
     }
 }
 
+/**
+ * Data class representing a success result.
+ *
+ * @property success indicates whether the operation was successful.
+ */
 @Serializable
 private data class SuccessResult(
     val success: Boolean,
 )
 
+/**
+ * Data class representing a token request.
+ *
+ * @property token the notification token.
+ * @property system the push notification system.
+ */
 @Serializable
 private data class TokenRequest(
     val token: String,
@@ -110,12 +149,34 @@ private data class TokenRequest(
     val system: PushSystem,
 )
 
+/**
+ * Data class representing a response containing a new token ID.
+ *
+ * @property id the new token ID.
+ */
 @Serializable
 private data class NewTokenResponse(
     @Serializable(with = UUIDSerializer::class)
     val id: UUID,
 )
 
+/**
+ * Data class representing a request to send a notification.
+ *
+ * @property title the notification title.
+ * @property titleLocalizationKey the key for the title localization.
+ * @property titleLocalizationArgs the arguments for the title localization.
+ * @property body the notification body.
+ * @property bodyLocalizationKey the key for the body localization.
+ * @property bodyLocalizationArgs the arguments for the body localization.
+ * @property imageUrl the URL of the notification image.
+ * @property channelId the ID of the notification channel.
+ * @property sound the sound to be played with the notification.
+ * @property icon the icon of the notification.
+ * @property collapseKey the collapse key for the notification.
+ * @property priority the priority of the notification.
+ * @property data additional data to be sent with the notification.
+ */
 @Serializable
 private data class SendNotificationRequest(
     val title: String? = null,
@@ -134,18 +195,27 @@ private data class SendNotificationRequest(
     val data: Map<String, String>? = null,
 )
 
+/**
+ * Serializer for the PushSystem enum.
+ */
 private class PushSystemSerializer : KSerializer<PushSystem> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("PushSystem", PrimitiveKind.STRING)
     override fun deserialize(decoder: Decoder) = PushSystem.valueOf(decoder.decodeString())
     override fun serialize(encoder: Encoder, value: PushSystem) = encoder.encodeString(value.name)
 }
 
+/**
+ * Serializer for the NotificationPriority enum.
+ */
 private class NotificationPrioritySerializer : KSerializer<NotificationPriority> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("NotificationPriority", PrimitiveKind.STRING)
     override fun deserialize(decoder: Decoder) = NotificationPriority.valueOf(decoder.decodeString())
     override fun serialize(encoder: Encoder, value: NotificationPriority) = encoder.encodeString(value.name)
 }
 
+/**
+ * Serializer for UUID.
+ */
 private class UUIDSerializer : KSerializer<UUID> {
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("UUID", PrimitiveKind.STRING)
     override fun deserialize(decoder: Decoder): UUID = UUID.fromString(decoder.decodeString())

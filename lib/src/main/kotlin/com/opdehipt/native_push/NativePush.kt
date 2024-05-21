@@ -11,37 +11,54 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.FirebaseOptions
 import com.google.firebase.messaging.*
 import com.google.gson.Gson
-import com.google.gson.JsonParseException
 import com.google.gson.JsonParser
 import com.google.gson.JsonSyntaxException
-import com.interaso.webpush.VapidKeys
-import com.interaso.webpush.WebPush
+import com.interaso.webpush.*
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.guava.await
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileNotFoundException
-import java.io.IOException
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
-import java.net.http.HttpResponse.BodyHandlers
-import java.security.GeneralSecurityException
-import java.security.NoSuchAlgorithmException
+import java.net.http.HttpResponse
 import java.util.*
-import javax.net.ssl.SSLException
 import kotlin.io.path.Path
 
-
+/**
+ * Abstract class representing a push notification system that supports multiple push services.
+ *
+ * @param ID The type of the user identifier.
+ */
 abstract class NativePush<ID> {
-    private var initialized = false
-    private lateinit var apnsClient: ApnsClient
+    private var initialized = false // Tracks whether the push system has been initialized
+    private lateinit var apnsClient: ApnsClient // APNS client for sending notifications to iOS devices
+    private lateinit var webPush: WebPush // WebPush client for sending notifications to web browsers
 
-    private lateinit var webPush: WebPush
-
-    @Throws(IOException::class, IllegalStateException::class, SSLException::class, NoSuchAlgorithmException::class,
-        IllegalArgumentException::class, SecurityException::class, FileNotFoundException::class, GeneralSecurityException::class)
+    /**
+     * Initializes the push notification system with the specified configurations.
+     *
+     * @param pushSystems The set of push systems to initialize.
+     * @param firebaseServiceAccountFile Path to the Firebase service account file.
+     * @param apnsP8File Path to the APNS P8 file.
+     * @param apnsTeamId APNS team ID.
+     * @param apnsKeyId APNS key ID.
+     * @param apnsP12File Path to the APNS P12 file.
+     * @param apnsP12Password Password for the APNS P12 file.
+     * @param apnsTopic APNS topic.
+     * @param webPushSubject Subject for web push notifications.
+     * @param vapidKeysFile Path to the VAPID keys file.
+     * @param vapidPublicKey VAPID public key.
+     * @param vapidPrivateKey VAPID private key.
+     * @param development Flag indicating if the system is in development mode.
+     * @throws IllegalStateException If the native push system is already initialized.
+     * @throws FileNotFoundException if FCM is used and the firebaseServiceAccountFile is not found.
+     * @throws IllegalArgumentException if certain push systems are used any of the necessary arguments
+     * is not specified or invalid.
+     */
+    @Throws(IllegalStateException::class, FileNotFoundException::class, IllegalArgumentException::class)
     fun initialize(
         pushSystems: Set<PushSystem> = PushSystem.entries.toSet(),
         firebaseServiceAccountFile: String? = null,
@@ -62,6 +79,7 @@ abstract class NativePush<ID> {
         }
         initialized = true
 
+        // Initialize Firebase Cloud Messaging (FCM)
         if (pushSystems.contains(PushSystem.FCM)) {
             if (firebaseServiceAccountFile != null) {
                 val serviceAccount = FileInputStream(firebaseServiceAccountFile)
@@ -71,71 +89,92 @@ abstract class NativePush<ID> {
                     .build()
 
                 FirebaseApp.initializeApp(options)
-            }
-            else {
-                throw IllegalArgumentException("firebaseServiceAccountFile must be specified when using FCN")
+            } else {
+                throw IllegalArgumentException("firebaseServiceAccountFile must be specified when using FCM")
             }
         }
 
+        // Initialize Apple Push Notification Service (APNS)
         if (pushSystems.contains(PushSystem.APNS)) {
             val apnsClientBuilder = ApnsClientBuilder()
 
             if (apnsTopic != null) {
                 apnsClientBuilder.withDefaultTopic(apnsTopic)
-            }
-            else {
+            } else {
                 throw IllegalArgumentException("apnsTopic must be specified when using APNS")
             }
 
+            // Configure APNS client with either P12 certificate or P8 key
             if (apnsP12File != null && apnsP12Password != null) {
                 apnsClientBuilder
                     .withCertificate(File(apnsP12File).inputStream())
                     .withPassword(apnsP12Password)
-            }
-            else if (apnsP8File != null && apnsKeyId != null && apnsTeamId != null) {
+            } else if (apnsP8File != null && apnsKeyId != null && apnsTeamId != null) {
                 val apnsAuthKey = File(apnsP8File).readLines().toMutableList()
-                apnsAuthKey.removeFirst()
-                apnsAuthKey.removeLast()
+                apnsAuthKey.removeFirst() // Remove the header line
+                apnsAuthKey.removeLast() // Remove the footer line
                 apnsClientBuilder
                     .withApnsAuthKey(apnsAuthKey.joinToString(""))
                     .withKeyID(apnsKeyId)
                     .withTeamID(apnsTeamId)
-            }
-            else {
+            } else {
                 throw IllegalArgumentException("Either apnsP12File and apnsP12Password or " +
                         "apnsP8File, apnsKeyId and apnsTeamId must be specified when using APNS")
             }
+            // Set the APNS gateway to development or production
             if (development) {
                 apnsClientBuilder.withDevelopmentGateway()
-            }
-            else {
+            } else {
                 apnsClientBuilder.withProductionGateway()
             }
-            apnsClient = apnsClientBuilder
-                .inAsynchronousMode()
-                .build()
+            try {
+                apnsClient = apnsClientBuilder
+                    .inAsynchronousMode()
+                    .build()
+            }
+            catch (e: Exception) {
+                throw IllegalArgumentException("Error while creating the APNS client", e)
+            }
         }
 
+        // Initialize Web Push
         if (pushSystems.contains(PushSystem.WEBPUSH)) {
             if (webPushSubject == null) {
                 throw IllegalArgumentException("webPushSubject must be specified when using web push")
             }
             val vapidKeys = if (vapidKeysFile != null) {
                 VapidKeys.load(Path(vapidKeysFile))
-            }
-            else if (vapidPublicKey != null && vapidPrivateKey != null) {
+            } else if (vapidPublicKey != null && vapidPrivateKey != null) {
                 VapidKeys.fromUncompressedBytes(vapidPublicKey, vapidPrivateKey)
-            }
-            else {
+            } else {
                 throw IllegalArgumentException("vapidKeyFile or vapidPublicKey and vapidPrivateKey must be specified when using web push")
             }
             webPush = WebPush(webPushSubject, vapidKeys)
         }
     }
 
-    @Throws(IllegalArgumentException::class, FirebaseMessagingException::class, JsonParseException::class,
-        JsonSyntaxException::class, IllegalStateException::class, UnsupportedOperationException::class,
-        GeneralSecurityException::class, IOException::class)
+    /**
+     * Sends a notification to the specified user with the given parameters.
+     *
+     * @param userId The identifier of the user to send the notification to.
+     * @param title The title of the notification.
+     * @param titleLocalizationKey The localization key for the notification title.
+     * @param titleLocalizationArgs The localization arguments for the notification title.
+     * @param body The body of the notification.
+     * @param bodyLocalizationKey The localization key for the notification body.
+     * @param bodyLocalizationArgs The localization arguments for the notification body.
+     * @param imageUrl The URL of the image to be displayed in the notification.
+     * @param channelId The ID of the channel to send the notification through.
+     * @param sound The sound to be played when the notification is received.
+     * @param icon The icon to be displayed in the notification.
+     * @param collapseKey The collapse key for the notification.
+     * @param priority The priority of the notification.
+     * @param data Additional data to be included in the notification.
+     * @return true if the notification was sent successfully, false otherwise.
+     * @throws IllegalArgumentException If any of the parameters are invalid.
+     * @throws JsonSyntaxException If web push is used and the token is not valid JSON.
+     */
+    @Throws(IllegalArgumentException::class, JsonSyntaxException::class)
     suspend fun sendNotification(
         userId: ID,
         title: String? = null,
@@ -154,6 +193,7 @@ abstract class NativePush<ID> {
     ): Boolean {
         val tokens = loadNotificationTokens(userId)
         var success = true
+        // Iterate over the notification tokens and send the notification to each one
         for ((token, system) in tokens) {
             val tokenSuccess = when (system) {
                 PushSystem.APNS -> sendAPNSNotification(
@@ -195,17 +235,41 @@ abstract class NativePush<ID> {
                     bodyLocalizationKey,
                     bodyLocalizationArgs,
                     imageUrl,
+                    priority,
                     data ?: emptyMap(),
                 )
             }
+            // If any notification fails, mark the overall success as false
             success = success && tokenSuccess
         }
         return success
     }
 
+    /**
+     * Loads the notification tokens for the specified user.
+     *
+     * @param userId The identifier of the user to load the notification tokens for.
+     * @return An iterable of pairs containing the token and the push system.
+     */
     protected abstract suspend fun loadNotificationTokens(userId: ID): Iterable<Pair<String, PushSystem>>
 
-    @Throws(IllegalStateException::class)
+    /**
+     * Sends an APNS notification with the specified parameters.
+     *
+     * @param token The APNS token.
+     * @param title The title of the notification.
+     * @param titleLocalizationKey The localization key for the notification title.
+     * @param titleLocalizationArgs The localization arguments for the notification title.
+     * @param body The body of the notification.
+     * @param bodyLocalizationKey The localization key for the notification body.
+     * @param bodyLocalizationArgs The localization arguments for the notification body.
+     * @param imageUrl The URL of the image to be displayed in the notification.
+     * @param sound The sound to be played when the notification is received.
+     * @param collapseKey The collapse key for the notification.
+     * @param priority The priority of the notification.
+     * @param data Additional data to be included in the notification.
+     * @return true if the notification was sent successfully, false otherwise.
+     */
     private suspend fun sendAPNSNotification(
         token: String,
         title: String?,
@@ -220,6 +284,7 @@ abstract class NativePush<ID> {
         priority: NotificationPriority,
         data: Map<String, String>
     ): Boolean {
+        // Build the APNS notification with provided parameters
         val notificationBuilder = Notification.Builder(token)
             .alertTitle(title)
             .alertTitleLocKey(titleLocalizationKey)
@@ -244,6 +309,7 @@ abstract class NativePush<ID> {
         val notification = notificationBuilder.build()
 
         val result = CompletableDeferred<Boolean>()
+        // Send the notification using the APNS client
         apnsClient.push(notification, object : NotificationResponseListener {
             override fun onSuccess(notification: Notification?) {
                 result.complete(true)
@@ -253,14 +319,31 @@ abstract class NativePush<ID> {
                 result.complete(false)
             }
         })
+        // Await the response
         return result.await()
     }
 
     /**
-     * @throws IllegalArgumentException If any of the parameters are invalid
-     * @throws FirebaseMessagingException If an error occurs while handing the message off to FCM for delivery
+     * Sends an FCM notification with the specified parameters.
+     *
+     * @param token The FCM token.
+     * @param title The title of the notification.
+     * @param titleLocalizationKey The localization key for the notification title.
+     * @param titleLocalizationArgs The localization arguments for the notification title.
+     * @param body The body of the notification.
+     * @param bodyLocalizationKey The localization key for the notification body.
+     * @param bodyLocalizationArgs The localization arguments for the notification body.
+     * @param imageUrl The URL of the image to be displayed in the notification.
+     * @param channelId The ID of the channel to send the notification through.
+     * @param sound The sound to be played when the notification is received.
+     * @param icon The icon to be displayed in the notification.
+     * @param collapseKey The collapse key for the notification.
+     * @param priority The priority of the notification.
+     * @param data Additional data to be included in the notification.
+     * @return true if the notification was sent successfully, false otherwise.
+     * @throws IllegalArgumentException If any of the parameters are invalid.
      */
-    @Throws(IllegalArgumentException::class, FirebaseMessagingException::class)
+    @Throws(IllegalArgumentException::class)
     private suspend fun sendFCMNotification(
         token: String,
         title: String?,
@@ -277,85 +360,104 @@ abstract class NativePush<ID> {
         priority: NotificationPriority,
         data: Map<String, String>,
     ): Boolean {
-        val androidNotification = AndroidNotification.builder()
-            .setTitle(title)
-            .setTitleLocalizationKey(titleLocalizationKey)
-            .addAllTitleLocalizationArgs(titleLocalizationArgs.toMutableList())
-            .setBody(body)
-            .setBodyLocalizationKey(bodyLocalizationKey)
-            .addAllBodyLocalizationArgs(bodyLocalizationArgs.toMutableList())
-            .setImage(imageUrl)
-            .setChannelId(channelId)
-            .setSound(sound)
-            .setIcon(icon)
-            .setPriority(priority.toAndroid())
-            .build()
-        val androidConfig = AndroidConfig.builder()
-            .setCollapseKey(collapseKey)
-            .setNotification(androidNotification)
-            .putAllData(data)
-            .build()
-
-        val apsAlert = ApsAlert.builder()
-            .setTitle(title)
-            .setTitleLocalizationKey(titleLocalizationKey)
-            .addAllTitleLocArgs(titleLocalizationArgs.toMutableList())
-            .setBody(body)
-            .setLocalizationKey(bodyLocalizationKey)
-            .addAllLocalizationArgs(bodyLocalizationArgs.toMutableList())
-            .build()
-        val aps = Aps.builder()
-            .setMutableContent(imageUrl != null)
-            .setThreadId(collapseKey)
-            .setSound(sound)
-            .setAlert(apsAlert)
-            .putAllCustomData(data)
-            .build()
-        val apnsFcmOptions = ApnsFcmOptions.builder()
-            .setImage(imageUrl)
-            .build()
-        val apnsConfig = ApnsConfig.builder()
-            .setAps(aps)
-            .setFcmOptions(apnsFcmOptions)
-            .build()
-
-        val webData = mutableMapOf(
-            "titleLocalizationKey" to titleLocalizationKey,
-            "titleLocalizationArgs" to titleLocalizationArgs,
-            "bodyLocalizationKey" to bodyLocalizationKey,
-            "bodyLocalizationArgs" to bodyLocalizationArgs,
-        )
-        webData.putAll(data)
-        val webPushNotification = WebpushNotification.builder()
-            .setTitle(title)
-            .setBody(body)
-            .setImage(imageUrl)
-            .setData(webData)
-            .build()
-        val webPushConfig = WebpushConfig.builder()
-            .setNotification(webPushNotification)
-            .build()
-
+        // Build the FCM message with provided parameters
         val message = Message.builder()
             .setToken(token)
-            .setAndroidConfig(androidConfig)
-            .setApnsConfig(apnsConfig)
-            .setWebpushConfig(webPushConfig)
+            .setAndroidConfig(
+                AndroidConfig.builder()
+                    .setCollapseKey(collapseKey)
+                    .setNotification(
+                        AndroidNotification.builder()
+                            .setTitle(title)
+                            .setTitleLocalizationKey(titleLocalizationKey)
+                            .addAllTitleLocalizationArgs(titleLocalizationArgs.toMutableList())
+                            .setBody(body)
+                            .setBodyLocalizationKey(bodyLocalizationKey)
+                            .addAllBodyLocalizationArgs(bodyLocalizationArgs.toMutableList())
+                            .setImage(imageUrl)
+                            .setChannelId(channelId)
+                            .setSound(sound)
+                            .setIcon(icon)
+                            .setPriority(priority.toAndroid())
+                            .build()
+                    )
+                    .putAllData(data)
+                    .build()
+            )
+            .setApnsConfig(
+                ApnsConfig.builder()
+                    .setAps(
+                        Aps.builder()
+                            .setMutableContent(imageUrl != null)
+                            .setThreadId(collapseKey)
+                            .setSound(sound)
+                            .setAlert(
+                                ApsAlert.builder()
+                                    .setTitle(title)
+                                    .setTitleLocalizationKey(titleLocalizationKey)
+                                    .addAllTitleLocArgs(titleLocalizationArgs.toMutableList())
+                                    .setBody(body)
+                                    .setLocalizationKey(bodyLocalizationKey)
+                                    .addAllLocalizationArgs(bodyLocalizationArgs.toMutableList())
+                                    .build()
+                            )
+                            .putAllCustomData(data)
+                            .build()
+                    )
+                    .setFcmOptions(
+                        ApnsFcmOptions.builder()
+                            .setImage(imageUrl)
+                            .build()
+                    )
+                    .build()
+            )
+            .setWebpushConfig(
+                WebpushConfig.builder()
+                    .setNotification(
+                        WebpushNotification.builder()
+                            .setTitle(title)
+                            .setBody(body)
+                            .setImage(imageUrl)
+                            .setData(
+                                mapOf(
+                                    "titleLocalizationKey" to titleLocalizationKey,
+                                    "titleLocalizationArgs" to titleLocalizationArgs,
+                                    "bodyLocalizationKey" to bodyLocalizationKey,
+                                    "bodyLocalizationArgs" to bodyLocalizationArgs,
+                                    *data.toList().toTypedArray(),
+                                )
+                            )
+                            .build()
+                    )
+                    .build()
+            )
             .build()
-        ApiFutureToListenableFuture(FirebaseMessaging.getInstance().sendAsync(message)).await()
-        return true
+        // Send the message using the FirebaseMessaging instance
+        return try {
+            ApiFutureToListenableFuture(FirebaseMessaging.getInstance().sendAsync(message)).await()
+            true
+        } catch (e: FirebaseMessagingException) {
+            false
+        }
     }
 
     /**
-     * @throws JsonParseException
-     * @throws JsonSyntaxException
-     * @throws IllegalStateException
-     * @throws UnsupportedOperationException
-     * @throws GeneralSecurityException
-     * @throws IOException
+     * Sends a web push notification with the specified parameters.
+     *
+     * @param token The web push token.
+     * @param title The title of the notification.
+     * @param titleLocalizationKey The localization key for the notification title.
+     * @param titleLocalizationArgs The localization arguments for the notification title.
+     * @param body The body of the notification.
+     * @param bodyLocalizationKey The localization key for the notification body.
+     * @param bodyLocalizationArgs The localization arguments for the notification body.
+     * @param imageUrl The URL of the image to be displayed in the notification.
+     * @param data Additional data to be included in the notification.
+     * @return true if the notification was sent successfully, false otherwise.
+     * @throws JsonSyntaxException if the specified token is not valid JSON.
+     * @throws IllegalArgumentException if the p256dh or the auth key aren't valid base64 strings.
      */
-    @Throws(JsonParseException::class, JsonSyntaxException::class, IllegalStateException::class,
-        UnsupportedOperationException::class, GeneralSecurityException::class, IOException::class)
+    @Throws(JsonSyntaxException::class, IllegalArgumentException::class)
     private suspend fun sendWebPushNotification(
         token: String,
         title: String?,
@@ -365,9 +467,10 @@ abstract class NativePush<ID> {
         bodyLocalizationKey: String?,
         bodyLocalizationArgs: Array<String>,
         imageUrl: String?,
+        priority: NotificationPriority,
         data: Map<String, String>,
     ): Boolean {
-        val tokenJson = JsonParser.parseString(token).asJsonObject
+        // Create the payload for the web push notification
         val payload = mapOf(
             "title" to title,
             "titleLocalizationKey" to titleLocalizationKey,
@@ -380,18 +483,33 @@ abstract class NativePush<ID> {
             val value = it.value
             if (value !== null) {
                 it.key to value
-            }
-            else {
+            } else {
                 null
             }
         }.toMap().toMutableMap()
         payload.putAll(data)
         val payloadJson = Gson().toJson(payload)
 
-        val endpoint = tokenJson["endpoint"].asString
-        val p256dh = tokenJson["p256dh"].asString
-        val auth = tokenJson["auth"].asString
+        // Parse the token to JSON and extract endpoint, p256dh and auth
+        val tokenJson = try {
+            JsonParser.parseString(token).asJsonObject
+        } catch (e: IllegalStateException) {
+            throw JsonSyntaxException("The token isn't a json object.")
+        }
+        val (endpoint, p256dh, auth) =
+        try {
+            Triple(
+                tokenJson["endpoint"].asString,
+                tokenJson["p256dh"].asString,
+                tokenJson["auth"].asString
+            )
+        } catch (e: UnsupportedOperationException) {
+            throw JsonSyntaxException("The token doesn't contain three json string values with the keys endpoint, p256dh and auth")
+        } catch (e: IllegalStateException) {
+            throw JsonSyntaxException("The token doesn't contain three json string values with the keys endpoint, p256dh and auth")
+        }
 
+        // Send the notification to the endpoint using the vapid keys.
         val reqHeaders = webPush.getHeaders(endpoint, null, null, null)
         val reqBody = webPush.getBody(
             payloadJson.toByteArray(),
@@ -404,7 +522,7 @@ abstract class NativePush<ID> {
             .uri(URI.create(endpoint))
             .apply { reqHeaders.forEach { setHeader(it.key, it.value) } }
             .build()
-        val response = HttpClient.newHttpClient().sendAsync(request, BodyHandlers.ofString()).await()
+        val response = HttpClient.newHttpClient().sendAsync(request, HttpResponse.BodyHandlers.ofString()).await()
         return response.statusCode() in 200..<300
     }
 }

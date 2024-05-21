@@ -1,37 +1,41 @@
+# Example Docker Compose configuration file for Native Push Notification Service
+
 services:
+  # Nginx service to act as a reverse proxy for the Ktor service
   nginx:
     image: nginx:alpine
     restart: always
     networks:
       - nginx
     ports:
-      - "0.0.0.0:80:80/tcp"
-      - "0.0.0.0:443:443/tcp"
+      - "0.0.0.0:80:80/tcp"  # Expose port 80
+      - "0.0.0.0:443:443/tcp"  # Expose port 443
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/ssl:ro
-      - ./nginx/example:/www/example:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # Nginx configuration
+      - ./nginx/ssl:/ssl:ro  # SSL certificates
+      - ./nginx/example:/www/example:ro  # Example website content
     depends_on:
-      - ktor
+      - ktor  # Ensure Ktor service is started before Nginx
 
+  # Ktor service running the Opdehipt application
   ktor:
-    image: eclipse-temurin:22-jre
+    image: eclipse-temurin:22-jre  # Use Eclipse Temurin JRE image
     restart: always
     networks:
       - nginx
       - postgres
     volumes:
-      - ./ktor/app.jar:/app/app.jar:ro
-    entrypoint: ["java", "-jar", "/app/app.jar"]
+      - ./ktor/app.jar:/app/app.jar:ro  # Application JAR file
+    entrypoint: ["java", "-jar", "/app/app.jar"]  # Command to run the application
     depends_on:
       db:
-        condition: service_healthy
+        condition: service_healthy  # Wait for DB service to be healthy before starting
     environment:
       ID_TYPE: UUID
       POSTGRES_HOST: db
       POSTGRES_DB: native_push
       POSTGRES_USER: native_push
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Use secrets for sensitive data
       FIREBASE_SERVICE_ACCOUNT_FILE: /run/secrets/service_account
       APNS_P8_FILE: /run/secrets/apns_p8_file
       APNS_KEY_ID_FILE: /run/secrets/apns_key_id
@@ -39,7 +43,7 @@ services:
       APNS_TOPIC: com.opdehipt.nativepushclient.example
       WEB_PUSH_SUBJECT_FILE: /run/secrets/web_push_subject
       VAPID_KEYS_FILE: /run/secrets/vapid_keys
-      DEVELOPMENT: true
+      DEVELOPMENT: true  # Enable development mode
     secrets:
       - db_password
       - service_account
@@ -49,31 +53,34 @@ services:
       - web_push_subject
       - vapid_keys
 
+  # PostgreSQL database service
   db:
-    image: postgres:alpine
+    image: postgres:alpine  # Use Alpine-based PostgreSQL image
     restart: always
     networks:
       - postgres
     volumes:
-      - ./db:/var/lib/postgresql/data
+      - ./db:/var/lib/postgresql/data  # Persist database data
     environment:
       POSTGRES_DB: native_push
       POSTGRES_USER: native_push
-      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password  # Use secrets for sensitive data
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready" ]
+      test: [ "CMD-SHELL", "pg_isready" ]  # Health check command
       interval: 5s
       timeout: 5s
       retries: 5
     secrets:
       - db_password
 
+# Define networks for services
 networks:
   nginx:
     driver: bridge
   postgres:
     driver: bridge
 
+# Define secrets for sensitive data
 secrets:
   db_password:
     file: ./secrets/db_password

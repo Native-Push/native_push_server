@@ -3,22 +3,23 @@
 
 [versions]
 #Shared
-kotlin="2.0.0-RC2"
+kotlin="2.0.0-RC3"
+dependency-license-report="2.7"
 
 #Lib
-junit-jupiter-engine = "5.10.1"
+junit-jupiter-engine = "5.10.2"
 firebase-admin = "9.2.0"
-kotlinx-coroutines-guava = "1.8.0"
+kotlinx-coroutines-guava = "1.8.1"
 apns = "dependencies-SNAPSHOT"
 web-push = "1.2.0"
 guava = "33.2.0-jre"
 
 #Ktor
 ktor="2.3.11"
-exposed="0.41.1"
+exposed="0.50.1"
 postgres="42.7.3"
 mysql="8.4.0"
-mariadb="3.3.3"
+mariadb="3.4.0"
 logback="1.4.14"
 
 [libraries]
@@ -35,11 +36,11 @@ web-push = { module = "com.interaso:webpush", version.ref = "web-push" }
 guava = { module = "com.google.guava:guava", version.ref = "guava"}
 
 #Ktor
-ktor-core = { module = "io.ktor:ktor-server-core-jvm" }
-ktor-netty = { module = "io.ktor:ktor-server-netty-jvm" }
-ktor-logging = { module = "io.ktor:ktor-server-call-logging-jvm" }
-ktor-contentNegotiation = { module = "io.ktor:ktor-server-content-negotiation-jvm" }
-ktor-serialization = { module = "io.ktor:ktor-serialization-kotlinx-json-jvm" }
+ktor-core = { module = "io.ktor:ktor-server-core-jvm", version.ref = "ktor" }
+ktor-netty = { module = "io.ktor:ktor-server-netty-jvm", version.ref = "ktor" }
+ktor-logging = { module = "io.ktor:ktor-server-call-logging-jvm", version.ref = "ktor" }
+ktor-contentNegotiation = { module = "io.ktor:ktor-server-content-negotiation-jvm", version.ref = "ktor" }
+ktor-serialization = { module = "io.ktor:ktor-serialization-kotlinx-json-jvm", version.ref = "ktor" }
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-cio = { module = "io.ktor:ktor-client-cio", version.ref = "ktor" }
 exposed-core = { module = "org.jetbrains.exposed:exposed-core", version.ref = "exposed" }
@@ -48,11 +49,12 @@ postgres = { module = "org.postgresql:postgresql", version.ref = "postgres" }
 mysql = { module = "com.mysql:mysql-connector-j", version.ref = "mysql" }
 mariadb = { module = "org.mariadb.jdbc:mariadb-java-client", version.ref = "mariadb" }
 logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
-ktor-tests = { module = "io.ktor:ktor-server-tests-jvm" }
+ktor-tests = { module = "io.ktor:ktor-server-tests-jvm", version.ref = "ktor" }
 
 [plugins]
 #Shared
 jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
+dependency-license-report = { id = "com.github.jk1.dependency-license-report", version.ref = "dependency-license-report" }
 
 #Ktor
 ktor = { id = "io.ktor.plugin", version.ref = "ktor" }

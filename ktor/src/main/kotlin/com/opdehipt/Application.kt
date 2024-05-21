@@ -9,6 +9,9 @@ import java.io.File
 import java.io.IOException
 import java.util.*
 
+/**
+ * Entry point of the application. Configures and starts the Ktor server.
+ */
 fun main() {
     val env = applicationEngineEnvironment {
         envConfig()
@@ -16,14 +19,21 @@ fun main() {
     embeddedServer(Netty, env).start(wait = true)
 }
 
+/**
+ * Configures the application engine environment.
+ * Sets up the Ktor application module and server connector.
+ */
 private fun ApplicationEngineEnvironmentBuilder.envConfig() {
+    // Define the main application module
     module {
         module()
     }
+    // Configure server connector
     connector {
         host = "0.0.0.0"
         port = 80
     }
+    // Map environment variables to application configuration properties
     val map = mapOf(
         "idType" to                     getEnvironmentVariable("ID_TYPE"),
         "postgresHost" to               getEnvironmentVariable("POSTGRES_HOST"),
@@ -61,10 +71,16 @@ private fun ApplicationEngineEnvironmentBuilder.envConfig() {
         }
     }
 
+    // Set application configuration using the mapped environment variables
     config = MapApplicationConfig(map)
 }
 
+/**
+ * Defines the main application module.
+ * Configures various plugins and settings based on environment properties.
+ */
 private fun Application.module() {
+    // Determine the ID type based on environment configuration
     val idTypeString = environment.config.propertyOrNull("idType")?.getString()
     val idType = when(idTypeString?.lowercase()) {
         "uuid" -> IdType.UUID
@@ -72,6 +88,7 @@ private fun Application.module() {
         else -> IdType.String
     }
 
+    // Configure various application features
     configureNativePush(idType)
     configureMonitoring()
     configureSerialization()
@@ -79,12 +96,22 @@ private fun Application.module() {
     configureRouting(idType, environment.config.propertyOrNull("authorizationValidationUrl")?.getString())
 }
 
+/**
+ * Retrieves an environment variable or its corresponding file content.
+ *
+ * @param key the name of the environment variable.
+ * @param checkForFile whether to check for a corresponding file containing the value.
+ * @return the value of the environment variable or the content of the file.
+ * @throws SecurityException if there is a security violation.
+ */
 @Throws(SecurityException::class)
 private fun getEnvironmentVariable(key: String, checkForFile: Boolean = true): String? {
+    // Retrieve the value directly from the environment variable
     val valueByKey = System.getenv(key)
     return if (!valueByKey.isNullOrBlank()) {
         valueByKey.trim()
     }
+    // Check for a file containing the value if the environment variable is not set
     else if (checkForFile) {
         val filePath = System.getenv("${key}_FILE")
         if (filePath != null) {
