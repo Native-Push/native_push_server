@@ -64,9 +64,9 @@ enum class NotificationPriority {
     }
 
     /**
-     * Converts the current priority to the corresponding APNS notification priority.
+     * Converts the current priority to the corresponding Web Push notification priority.
      *
-     * @return The APNS notification priority.
+     * @return The Web Push notification priority.
      */
     internal fun toWebPush(): WebPush.Urgency = when (this) {
         // Web push has only four levels: VeryLow, Low, Normal and High

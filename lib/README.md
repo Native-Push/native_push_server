@@ -15,7 +15,7 @@ Add the following dependencies to your `build.gradle.kts` file:
 
 ```kotlin
 dependencies {
-    implementation("com.opdehipt.native-push:1.0.0")
+    implementation("com.opdehipt:native-push:1.0")
 }
 ```
 
